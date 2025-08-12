@@ -1,0 +1,180 @@
+import { create } from 'zustand';
+import { GameState, DAO, Mission, Territory } from '@/types/game';
+
+interface GameStateStore extends GameState {
+  // Actions
+  updateDAO: (dao: DAO) => void;
+  addMission: (mission: Mission) => void;
+  updateMission: (missionId: string, updates: Partial<Mission>) => void;
+  captureTerritory: (territoryId: string, newOwner: string) => void;
+  addDAO: (dao: DAO) => void;
+  
+  // Game loop
+  processGameTick: () => void;
+  
+  // Battle system
+  initiateBattle: (attackerDAO: string, targetTerritory: string) => void;
+  resolveBattle: (missionId: string) => void;
+}
+
+const useGameState = create<GameStateStore>((set, get) => ({
+  // Initial state
+  daos: [],
+  territories: [],
+  missions: [],
+  leaderboard: [],
+  season: {
+    number: 1,
+    startTime: Date.now(),
+    endTime: Date.now() + (30 * 24 * 60 * 60 * 1000), // 30 days
+  },
+
+  // Actions
+  updateDAO: (dao: DAO) => 
+    set((state) => ({
+      daos: state.daos.map(d => d.id === dao.id ? dao : d)
+    })),
+
+  addDAO: (dao: DAO) =>
+    set((state) => ({
+      daos: [...state.daos, dao]
+    })),
+
+  addMission: (mission: Mission) =>
+    set((state) => ({
+      missions: [...state.missions, mission]
+    })),
+
+  updateMission: (missionId: string, updates: Partial<Mission>) =>
+    set((state) => ({
+      missions: state.missions.map(m => 
+        m.id === missionId ? { ...m, ...updates } : m
+      )
+    })),
+
+  captureTerritory: (territoryId: string, newOwner: string) =>
+    set((state) => ({
+      territories: state.territories.map(t =>
+        t.id === territoryId ? { ...t, owner: newOwner } : t
+      )
+    })),
+
+  processGameTick: () => {
+    const state = get();
+    const now = Date.now();
+    
+    // Process active missions
+    state.missions.forEach(mission => {
+      if (mission.status === 'active' && mission.startTime) {
+        const elapsed = now - mission.startTime;
+        if (elapsed >= mission.duration * 1000) {
+          get().resolveBattle(mission.id);
+        }
+      }
+    });
+
+    // Update resource production
+    state.territories.forEach(territory => {
+      if (territory.owner) {
+        const dao = state.daos.find(d => d.id === territory.owner);
+        if (dao) {
+          const resourceGain = territory.productionRate / 60; // per second
+          const updatedDAO = {
+            ...dao,
+            resources: {
+              ...dao.resources,
+              [territory.resourceType]: dao.resources[territory.resourceType] + resourceGain
+            }
+          };
+          get().updateDAO(updatedDAO);
+        }
+      }
+    });
+
+    // Update leaderboard
+    const updatedLeaderboard = state.daos
+      .map(dao => ({
+        daoId: dao.id,
+        score: dao.level * 100 + dao.territories.length * 50,
+        territoriesControlled: dao.territories.length,
+        battlesWon: 0, // This would be tracked separately
+        rank: 0,
+      }))
+      .sort((a, b) => b.score - a.score)
+      .map((entry, index) => ({ ...entry, rank: index + 1 }));
+
+    set({ leaderboard: updatedLeaderboard });
+  },
+
+  initiateBattle: (attackerDAO: string, targetTerritory: string) => {
+    const mission: Mission = {
+      id: `battle_${Date.now()}`,
+      type: 'attack',
+      participants: [attackerDAO],
+      target: targetTerritory,
+      duration: 300, // 5 minutes
+      rewards: [
+        { type: 'xp', amount: 100 },
+        { type: 'resource', amount: 1000, resourceType: 'computing' }
+      ],
+      status: 'active',
+      startTime: Date.now(),
+    };
+
+    get().addMission(mission);
+  },
+
+  resolveBattle: (missionId: string) => {
+    const state = get();
+    const mission = state.missions.find(m => m.id === missionId);
+    if (!mission || !mission.target) return;
+
+    const attackerDAO = state.daos.find(d => d.id === mission.participants[0]);
+    const territory = state.territories.find(t => t.id === mission.target);
+    
+    if (!attackerDAO || !territory) return;
+
+    // Simple battle resolution - could be made more complex
+    const attackPower = attackerDAO.units.reduce((sum, unit) => 
+      sum + unit.level * 10, 0
+    );
+    const defensePower = territory.defenseLevel * 50;
+
+    const success = attackPower > defensePower;
+
+    if (success) {
+      // Capture territory
+      get().captureTerritory(territory.id, attackerDAO.id);
+      
+      // Update DAO
+      const updatedDAO = {
+        ...attackerDAO,
+        territories: [...attackerDAO.territories, territory],
+        level: attackerDAO.level + 1,
+      };
+      get().updateDAO(updatedDAO);
+    }
+
+    // Update mission status
+    get().updateMission(missionId, { 
+      status: success ? 'completed' : 'failed' 
+    });
+
+    // Award rewards if successful
+    if (success && mission.rewards) {
+      mission.rewards.forEach(reward => {
+        if (reward.type === 'xp') {
+          attackerDAO.units.forEach(unit => {
+            unit.experience += reward.amount;
+            if (unit.experience >= unit.level * 100) {
+              unit.level += 1;
+              unit.experience = 0;
+            }
+          });
+        }
+      });
+    }
+  },
+}));
+
+export default useGameState;
