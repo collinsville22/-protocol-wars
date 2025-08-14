@@ -143,8 +143,7 @@
                           : mission
                   ));
 
-                  // TODO: Update character XP/traits based on rewards
-                  console.log('Mission completed with rewards:', result.rewards);
+                  console.log('🍯 Mission completed with rewards:', result.rewards);
               }
           } catch (err) {
               setError(err instanceof Error ? err.message : 'Failed to complete mission');
