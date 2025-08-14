@@ -1,4 +1,4 @@
- import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, PublicKey } from '@solana/web3.js';
   // Note: Using mock implementation since exact Honeycomb SDK might differ
   // This structure follows their documented patterns
 
