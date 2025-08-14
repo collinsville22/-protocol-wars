@@ -1,12 +1,24 @@
-'use client';
+import HoneycombClient, { Mission, Character, Project } from '@/lib/honeycomb';
+
+  To:
+
+  import { Mission, Character, Project } from '@/lib/honeycomb';
+  import HoneycombClient from '@/lib/honeycomb';
+
+  OR better yet, use this corrected import:
+
+  'use client';
 
   import { useState, useEffect, useCallback } from 'react';
   import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-  import HoneycombClient, { Mission, Character, Project } from '@/lib/honeycomb';
+  import { Mission, Character, Project } from '@/lib/honeycomb';
+
+  // Import the class directly
+  const HoneycombClient = require('@/lib/honeycomb').default;
 
   interface UseHoneycombReturn {
       // State
-      client: HoneycombClient | null;
+      client: any;
       project: Project | null;
       missions: Mission[];
       characters: Character[];
@@ -25,7 +37,7 @@
       const { connection } = useConnection();
       const { publicKey, wallet } = useWallet();
 
-      const [client, setClient] = useState<HoneycombClient | null>(null);
+      const [client, setClient] = useState<any>(null);
       const [project, setProject] = useState<Project | null>(null);
       const [missions, setMissions] = useState<Mission[]>([]);
       const [characters, setCharacters] = useState<Character[]>([]);
@@ -35,12 +47,18 @@
       // Initialize Honeycomb client when wallet connects
       useEffect(() => {
           if (connection && wallet) {
-              const honeycombClient = new HoneycombClient({
-                  connection,
-                  wallet,
-                  cluster: 'devnet'
-              });
-              setClient(honeycombClient);
+              try {
+                  const { default: HoneycombClientClass } = require('@/lib/honeycomb');
+                  const honeycombClient = new HoneycombClientClass({
+                      connection,
+                      wallet,
+                      cluster: 'devnet'
+                  });
+                  setClient(honeycombClient);
+              } catch (error) {
+                  console.error('Failed to initialize Honeycomb client:', error);
+                  setError('Failed to initialize client');
+              }
           } else {
               setClient(null);
           }
@@ -104,7 +122,6 @@
               const success = await client.startMission(missionId, characterId);
 
               if (success) {
-                  // Update mission status
                   setMissions(prev => prev.map(mission =>
                       mission.id === missionId
                           ? { ...mission, status: 'active' as const }
@@ -136,7 +153,6 @@
               const result = await client.completeMission(missionId);
 
               if (result.success) {
-                  // Update mission status
                   setMissions(prev => prev.map(mission =>
                       mission.id === missionId
                           ? { ...mission, status: 'completed' as const }
