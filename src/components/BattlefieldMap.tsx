@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Text, Html } from '@react-three/drei';
+import { OrbitControls, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import useGameState from '@/hooks/useGameState';
 import { Territory, DAO } from '@/types/game';
