@@ -57,7 +57,7 @@
         <div className="min-h-screen bg-black flex items-center justify-center">
           <div className="relative">
             <div className="text-4xl font-mono text-green-400 animate-pulse tracking-wider">
-              >>> INITIALIZING PROTOCOL WARS
+              {`>>> INITIALIZING PROTOCOL WARS`}
             </div>
             <div className="mt-4 h-1 bg-gray-800 rounded-full overflow-hidden">
               <div className="h-full bg-green-400 animate-pulse" style={{width: '60%'}}></div>
@@ -68,13 +68,15 @@
     }
 
     return (
-      <main className="min-h-screen bg-black text-white overflow-hidden">
+      <div className="min-h-screen bg-black text-white overflow-hidden">
         {/* Background Effects */}
         <div className="fixed inset-0 bg-gradient-to-br from-gray-900 via-black to-red-900 opacity-50"></div>
-        <div className="fixed inset-0 bg-[url('data:image/svg+xml,%3Csvg width="60" height="60" viewBox="0 0 60 60"
-   xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Cg fill="%23ffffff"
-  fill-opacity="0.03"%3E%3Cpath d="m36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6
-  34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-10"></div>
+        <div className="fixed inset-0 opacity-10" style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60'
+  xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff'
+  fill-opacity='0.03'%3E%3Cpath d='m36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6
+  34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
+        }}></div>
 
         {!gameStarted ? (
           <>
@@ -99,13 +101,13 @@
               <div className="flex-1 flex flex-col items-center justify-center px-8">
                 <div className="text-center mb-16">
                   <div className="relative">
-                    <h1 className="text-8xl md:text-9xl font-black tracking-tight mb-4 relative">
+                    <h1 className="text-6xl md:text-8xl font-black tracking-tight mb-4 relative">
                       <span className="bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500 bg-clip-text
   text-transparent animate-pulse">
                         PROTOCOL
                       </span>
                     </h1>
-                    <h2 className="text-6xl md:text-7xl font-black tracking-wider text-white opacity-90">
+                    <h2 className="text-4xl md:text-6xl font-black tracking-wider text-white opacity-90">
                       WARS
                     </h2>
                     <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-64 h-1
@@ -346,6 +348,6 @@
             </div>
           </>
         )}
-      </main>
+      </div>
     );
   }
