@@ -18,6 +18,9 @@ interface GameStateStore extends GameState {
   
   // Unit system
   deployUnit: (unitType: UnitType, position: { q: number; r: number; s: number }) => void;
+  
+  // Game initialization
+  initializeGame: () => void;
 }
 
 const useGameState = create<GameStateStore>((set, get) => ({
@@ -224,6 +227,123 @@ const useGameState = create<GameStateStore>((set, get) => ({
     };
 
     get().updateDAO(updatedDAO);
+  },
+
+  initializeGame: () => {
+    const state = get();
+    
+    // Generate hex grid territories
+    const generateHexGrid = (radius: number): Territory[] => {
+      const territories: Territory[] = [];
+      let id = 0;
+
+      for (let q = -radius; q <= radius; q++) {
+        const r1 = Math.max(-radius, -q - radius);
+        const r2 = Math.min(radius, -q + radius);
+        
+        for (let r = r1; r <= r2; r++) {
+          const s = -q - r;
+          const resourceTypes = ['computing', 'liquidity', 'community', 'governance'] as const;
+          
+          territories.push({
+            id: `hex_${id++}`,
+            hexCoords: { q, r, s },
+            owner: Math.random() > 0.8 ? 'enemy_dao' : '', // Some enemy territories
+            resourceType: resourceTypes[Math.floor(Math.random() * resourceTypes.length)],
+            productionRate: Math.floor(Math.random() * 50) + 10,
+            defenseLevel: Math.floor(Math.random() * 3),
+          });
+        }
+      }
+      
+      return territories;
+    };
+
+    // Create initial territories
+    const initialTerritories = generateHexGrid(3);
+    
+    // Create player DAO if it doesn't exist
+    if (!state.daos.find(dao => dao.id === 'player_dao')) {
+      const playerDAO: DAO = {
+        id: 'player_dao',
+        name: 'Your DAO',
+        treasury: '0x1234...abcd',
+        level: 1,
+        territories: initialTerritories.filter(t => !t.owner).slice(0, 2), // Give player 2 starting territories
+        units: [],
+        resources: {
+          computing: 1000,
+          liquidity: 1000,
+          community: 1000,
+          governance: 1000,
+        },
+        alliances: [],
+        color: '#3b82f6',
+        leader: 'Commander',
+      };
+      
+      // Mark some territories as owned by player
+      initialTerritories.slice(0, 2).forEach(t => t.owner = 'player_dao');
+      
+      get().addDAO(playerDAO);
+    }
+
+    // Create enemy DAO
+    if (!state.daos.find(dao => dao.id === 'enemy_dao')) {
+      const enemyDAO: DAO = {
+        id: 'enemy_dao',
+        name: 'Rival Protocol',
+        treasury: '0xabcd...1234',
+        level: 2,
+        territories: initialTerritories.filter(t => t.owner === 'enemy_dao'),
+        units: [],
+        resources: {
+          computing: 800,
+          liquidity: 800,
+          community: 800,
+          governance: 800,
+        },
+        alliances: [],
+        color: '#ef4444',
+        leader: 'AI Commander',
+      };
+      
+      get().addDAO(enemyDAO);
+    }
+
+    // Set territories in state
+    set({ territories: initialTerritories });
+
+    // Add some initial missions
+    if (state.missions.length === 0) {
+      const initialMissions: Mission[] = [
+        {
+          id: 'tutorial_deploy',
+          type: 'deploy' as any,
+          participants: ['player_dao'],
+          duration: 60,
+          rewards: [
+            { type: 'xp', amount: 100 },
+            { type: 'resource', amount: 500, resourceType: 'computing' }
+          ],
+          status: 'pending',
+        },
+        {
+          id: 'tutorial_attack',
+          type: 'attack',
+          participants: ['player_dao'],
+          target: initialTerritories.find(t => !t.owner)?.id,
+          duration: 120,
+          rewards: [
+            { type: 'xp', amount: 200 },
+            { type: 'resource', amount: 1000, resourceType: 'liquidity' }
+          ],
+          status: 'pending',
+        }
+      ];
+      
+      initialMissions.forEach(mission => get().addMission(mission));
+    }
   },
 }));
 

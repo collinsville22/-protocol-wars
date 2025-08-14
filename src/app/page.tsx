@@ -8,10 +8,12 @@ import DAOPanel from '@/components/DAOPanel';
 import Leaderboard from '@/components/Leaderboard';
 import { ResourcePanel, UnitDeployment, BattleLog, LeaderboardPanel } from '@/components/GameSystems';
 import SoundSystem from '@/components/SoundSystem';
+import TutorialSystem from '@/components/TutorialSystem';
 import useGameState from '@/hooks/useGameState';
 
 export default function Home() {
   const [isClient, setIsClient] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(true);
   const { processGameTick, daos, territories, missions, leaderboard } = useGameState();
 
   useEffect(() => {
@@ -38,6 +40,11 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden">
       <SoundSystem enabled={true} />
+      
+      {/* Tutorial System */}
+      {showTutorial && (
+        <TutorialSystem onComplete={() => setShowTutorial(false)} />
+      )}
       
       {/* TLOU2-Inspired Animated Background */}
       <div className="fixed inset-0 bg-gradient-to-br from-gray-900 via-black to-red-900 opacity-70"></div>
@@ -116,18 +123,22 @@ export default function Home() {
       <div className="relative z-10 grid grid-cols-1 lg:grid-cols-6 gap-4 lg:gap-6 p-4">
         {/* Left Panel - Enhanced Resources & Unit Management */}
         <div className="lg:col-span-1 space-y-4">
-          <div className="bg-black/80 border border-red-500/30 rounded-lg">
+          <div className="bg-black/80 border border-red-500/30 rounded-lg relative" id="resources">
+            {/* Tutorial highlight */}
+            <div className="absolute -inset-1 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-lg opacity-0 animate-pulse tutorial-highlight"></div>
             <ResourcePanel />
           </div>
-          <div className="bg-black/80 border border-purple-500/30 rounded-lg">
+          <div className="bg-black/80 border border-purple-500/30 rounded-lg relative" id="deploy">
+            <div className="absolute -inset-1 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg opacity-0 animate-pulse tutorial-highlight"></div>
             <UnitDeployment />
           </div>
         </div>
 
         {/* Center - Enhanced 3D Battlefield */}
         <div className="lg:col-span-3">
-          <div className="bg-black/90 border-2 border-red-500/50 rounded-lg p-4 shadow-2xl shadow-red-500/20">
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-black/90 border-2 border-red-500/50 rounded-lg p-4 shadow-2xl shadow-red-500/20 relative" id="battlefield">
+            <div className="absolute -inset-1 bg-gradient-to-r from-red-500 to-yellow-500 rounded-lg opacity-0 animate-pulse tutorial-highlight"></div>
+            <div className="flex items-center justify-between mb-4 relative z-10">
               <h2 className="text-2xl font-bold text-red-400 font-mono tracking-wider">🌍 COMBAT ZONE</h2>
               <div className="flex space-x-2">
                 <button className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded font-bold animate-pulse">
@@ -145,6 +156,25 @@ export default function Home() {
                 <div className="text-xs text-white">Units: {daos.find(d => d.id === 'player_dao')?.units?.length || 0}/10</div>
                 <div className="text-xs text-white">Territories: {territories.filter(t => t.owner === 'player_dao').length}</div>
               </div>
+              
+              {/* Battlefield Instructions */}
+              {territories.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded">
+                  <div className="text-center text-white p-6">
+                    <div className="text-4xl mb-4 animate-spin">⚡</div>
+                    <div className="text-xl font-bold mb-2">Initializing Battlefield...</div>
+                    <div className="text-gray-400">Generating territories and enemy forces</div>
+                  </div>
+                </div>
+              )}
+              
+              {territories.length > 0 && daos.find(d => d.id === 'player_dao')?.units?.length === 0 && (
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/80 p-4 rounded border border-yellow-500/50 text-center">
+                  <div className="text-yellow-400 font-bold mb-2">👆 CLICK TO START!</div>
+                  <div className="text-white text-sm">Click gray territories to attack</div>
+                  <div className="text-white text-sm">Deploy units for stronger attacks</div>
+                </div>
+              )}
             </div>
           </div>
         </div>

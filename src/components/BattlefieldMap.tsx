@@ -154,18 +154,16 @@ function generateHexGrid(radius: number): Territory[] {
 
 // Scene setup component
 function BattlefieldScene() {
-  const { territories, daos, initiateBattle } = useGameState();
+  const { territories, daos, initiateBattle, initializeGame } = useGameState();
   const { camera } = useThree();
   const [selectedTerritory, setSelectedTerritory] = useState<string | null>(null);
 
   useEffect(() => {
-    // Initialize territories if empty
-    if (territories.length === 0) {
-      const initialTerritories = generateHexGrid(4);
-      // This would need to be implemented in the store
-      // useGameState.setState({ territories: initialTerritories });
+    // Initialize game if empty
+    if (territories.length === 0 || daos.length === 0) {
+      initializeGame();
     }
-  }, [territories]);
+  }, [territories, daos, initializeGame]);
 
   const handleTerritoryClick = (territory: Territory) => {
     setSelectedTerritory(territory.id);
