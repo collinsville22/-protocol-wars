@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { GameState, DAO, Mission, Territory } from '@/types/game';
+import { GameState, DAO, Mission, Territory, Unit, UnitType } from '@/types/game';
 
 interface GameStateStore extends GameState {
   // Actions
@@ -15,6 +15,9 @@ interface GameStateStore extends GameState {
   // Battle system
   initiateBattle: (attackerDAO: string, targetTerritory: string) => void;
   resolveBattle: (missionId: string) => void;
+  
+  // Unit system
+  deployUnit: (unitType: UnitType, position: { q: number; r: number; s: number }) => void;
 }
 
 const useGameState = create<GameStateStore>((set, get) => ({
@@ -174,6 +177,53 @@ const useGameState = create<GameStateStore>((set, get) => ({
         }
       });
     }
+  },
+
+  deployUnit: (unitType: UnitType, position: { q: number; r: number; s: number }) => {
+    const state = get();
+    const playerDAO = state.daos.find(dao => dao.id === 'player_dao');
+    
+    if (!playerDAO) {
+      // Create player DAO if it doesn't exist
+      const newPlayerDAO: DAO = {
+        id: 'player_dao',
+        name: 'Player DAO',
+        treasury: '0x...',
+        level: 1,
+        territories: [],
+        units: [],
+        resources: {
+          computing: 1000,
+          liquidity: 1000,
+          community: 1000,
+          governance: 1000,
+        },
+        alliances: [],
+        color: '#3b82f6',
+        leader: 'player',
+      };
+      get().addDAO(newPlayerDAO);
+    }
+
+    const updatedPlayerDAO = state.daos.find(dao => dao.id === 'player_dao');
+    if (!updatedPlayerDAO) return;
+
+    const newUnit: Unit = {
+      id: `unit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      type: unitType,
+      owner: 'player_dao',
+      traits: [],
+      experience: 0,
+      level: 1,
+      position: position,
+    };
+
+    const updatedDAO: DAO = {
+      ...updatedPlayerDAO,
+      units: [...updatedPlayerDAO.units, newUnit],
+    };
+
+    get().updateDAO(updatedDAO);
   },
 }));
 
