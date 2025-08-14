@@ -111,20 +111,20 @@
                       console.log('🍯 Honeycomb Protocol: Creating project', project);
                       return project;
                   },
-                  createCharacter: async (name: string, model: string): Promise<Character> => {
-                      await new Promise(resolve => setTimeout(resolve, 800));
-                      const character: Character = {
-                          id: `char_${Date.now()}`,
-                          name,
-                          level: 1,
-                          xp: 0,
-                          traits: [],
-                          owner: wallet?.publicKey,
-                          model,
-                      };
-                      console.log('🍯 Honeycomb Protocol: Creating character', character);
-                      return character;
-                  },
+                   createCharacter: async (name: string, model: string): Promise<Character> => {
+      await new Promise(resolve => setTimeout(resolve, 800));
+      const character: Character = {
+          id: `char_${Date.now()}`,
+          name,
+          level: 1,
+          xp: 0,
+          traits: [],
+          owner: publicKey,
+          model,
+      };
+      console.log('🍯 Honeycomb Protocol: Creating character', character);
+      return character;
+  },
                   startMission: async (missionId: string, characterId: string): Promise<boolean> => {
                       console.log(`🍯 Honeycomb Protocol: Starting mission ${missionId}`);
                       await new Promise(resolve => setTimeout(resolve, 800));
