@@ -1,56 +1,86 @@
 'use client';
 
   import { useState, useEffect } from 'react';
+  import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+  import { useWallet } from '@solana/wallet-adapter-react';
+  import { WalletStatus } from '@/components/WalletProvider';
+  import { useHoneycomb } from '@/hooks/useHoneycomb';
 
   export default function Home() {
     const [isClient, setIsClient] = useState(false);
     const [gameStarted, setGameStarted] = useState(false);
-    const [selectedDAO, setSelectedDAO] = useState(0);
+    const [selectedMission, setSelectedMission] = useState<string | null>(null);
     const [missionProgress, setMissionProgress] = useState(0);
+    const [notifications, setNotifications] = useState<string[]>([]);
+
+    const { connected } = useWallet();
+    const {
+      missions,
+      characters,
+      loading,
+      error,
+      initializeProject,
+      createCharacter,
+      startMission,
+      completeMission
+    } = useHoneycomb();
 
     useEffect(() => {
       setIsClient(true);
 
-      // Simulate mission progress
-      const progressInterval = setInterval(() => {
-        setMissionProgress(prev => (prev + 1) % 101);
-      }, 100);
-
-      return () => clearInterval(progressInterval);
-    }, []);
-
-    const daos = [
-      {
-        name: "SHADOW PROTOCOL",
-        level: 7,
-        power: 1847,
-        status: "ACTIVE",
-        color: "from-red-900 to-red-700",
-        accent: "border-red-500",
-        territories: 3,
-        threat: "HIGH"
-      },
-      {
-        name: "GHOST NETWORK",
-        level: 5,
-        power: 1203,
-        status: "HOSTILE",
-        color: "from-purple-900 to-purple-700",
-        accent: "border-purple-500",
-        territories: 2,
-        threat: "MEDIUM"
-      },
-      {
-        name: "IRON COLLECTIVE",
-        level: 3,
-        power: 856,
-        status: "NEUTRAL",
-        color: "from-gray-800 to-gray-600",
-        accent: "border-gray-500",
-        territories: 1,
-        threat: "LOW"
+      // Auto-initialize project when wallet connects
+      if (connected && missions.length === 0) {
+        initializeProject("Protocol Wars DAO");
       }
-    ];
+    }, [connected, initializeProject, missions.length]);
+
+    // Simulate mission progress for active missions
+    useEffect(() => {
+      const activeMissions = missions.filter(m => m.status === 'active');
+      if (activeMissions.length > 0) {
+        const progressInterval = setInterval(() => {
+          setMissionProgress(prev => {
+            const newProgress = (prev + 1) % 101;
+
+            // Auto-complete mission at 100%
+            if (newProgress === 100 && selectedMission) {
+              completeMission(selectedMission);
+              addNotification(`Mission completed! Rewards earned.`);
+              setSelectedMission(null);
+            }
+
+            return newProgress;
+          });
+        }, 50);
+
+        return () => clearInterval(progressInterval);
+      }
+    }, [missions, selectedMission, completeMission]);
+
+    const addNotification = (message: string) => {
+      setNotifications(prev => [...prev.slice(-2), message]);
+      setTimeout(() => {
+        setNotifications(prev => prev.slice(1));
+      }, 5000);
+    };
+
+    const handleStartMission = async (missionId: string) => {
+      if (characters.length === 0) {
+        await createCharacter("DAO Commander", "leader");
+        addNotification("Character created: DAO Commander");
+      }
+
+      const character = characters[0] || { id: 'temp_char' };
+      const success = await startMission(missionId, character.id);
+
+      if (success) {
+        setSelectedMission(missionId);
+        setMissionProgress(0);
+        addNotification("Mission started successfully!");
+      } else {
+        addNotification("Failed to start mission. Try again.");
+      }
+    };
 
     if (!isClient) {
       return (
@@ -78,6 +108,23 @@
   34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
         }}></div>
 
+        {/* Notifications */}
+        <div className="fixed top-4 right-4 z-50 space-y-2">
+          {notifications.map((notification, index) => (
+            <div key={index} className="bg-green-900/90 border border-green-500 px-4 py-2 rounded-lg text-green-200
+  animate-pulse">
+              {notification}
+            </div>
+          ))}
+        </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="fixed top-4 left-4 z-50 bg-red-900/90 border border-red-500 px-4 py-2 rounded-lg text-red-200">
+            Error: {error}
+          </div>
+        )}
+
         {!gameStarted ? (
           <>
             {/* Main Menu */}
@@ -87,9 +134,10 @@
               <header className="p-8">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
-                    <div className="w-2 h-2 bg-red-500 animate-pulse rounded-full"></div>
-                    <span className="text-xs font-mono text-gray-400 tracking-wider">SECURE CONNECTION
-  ESTABLISHED</span>
+                    <WalletStatus />
+                    <span className="text-xs font-mono text-gray-400 tracking-wider">
+                      {connected ? 'HONEYCOMB PROTOCOL READY' : 'WALLET CONNECTION REQUIRED'}
+                    </span>
                   </div>
                   <div className="text-xs font-mono text-gray-400">
                     Season 1 • {new Date().toLocaleDateString()}
@@ -110,8 +158,8 @@
                     <h2 className="text-4xl md:text-6xl font-black tracking-wider text-white opacity-90">
                       WARS
                     </h2>
-                    <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-64 h-1
-  bg-gradient-to-r from-transparent via-red-500 to-transparent"></div>
+                    <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-64 h-1 bg-gradient-to-r
+  from-transparent via-red-500 to-transparent"></div>
                   </div>
 
                   <p className="text-xl text-gray-300 mt-8 max-w-2xl font-light tracking-wide leading-relaxed">
@@ -120,26 +168,39 @@
                   </p>
                 </div>
 
-                {/* Action Buttons */}
+                {/* Connection Status & Action */}
                 <div className="space-y-6">
-                  <button
-                    onClick={() => setGameStarted(true)}
-                    className="group relative px-16 py-6 bg-gradient-to-r from-red-600 to-red-700 border-2
-  border-red-400 transform transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-red-500/50"
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-r from-red-500 to-red-600 opacity-0
+                  {!connected ? (
+                    <div className="text-center space-y-4">
+                      <div className="text-red-400 font-mono text-lg mb-4">
+                        WALLET CONNECTION REQUIRED
+                      </div>
+                      <WalletMultiButton className="!bg-gradient-to-r !from-blue-600 !to-purple-600 hover:!from-blue-700
+  hover:!to-purple-700 !border-2 !border-blue-400 !px-8 !py-4 !text-xl !font-bold !tracking-wider" />
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setGameStarted(true)}
+                      className="group relative px-16 py-6 bg-gradient-to-r from-red-600 to-red-700 border-2 border-red-400
+  transform transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-red-500/50"
+                      disabled={loading}
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-red-500 to-red-600 opacity-0
   group-hover:opacity-100 transition-opacity duration-300"></div>
-                    <span className="relative text-2xl font-bold tracking-wider">ENTER THE WASTELAND</span>
-                    <div className="absolute inset-0 border-2 border-red-300 transform scale-110 opacity-0
+                      <span className="relative text-2xl font-bold tracking-wider">
+                        {loading ? 'LOADING...' : 'ENTER THE WASTELAND'}
+                      </span>
+                      <div className="absolute inset-0 border-2 border-red-300 transform scale-110 opacity-0
   group-hover:opacity-100 transition-all duration-300"></div>
-                  </button>
+                    </button>
+                  )}
 
                   <div className="text-center">
-                    <div className="text-sm font-mono text-gray-500 mb-2">SURVIVAL STATISTICS</div>
+                    <div className="text-sm font-mono text-gray-500 mb-2">BLOCKCHAIN STATUS</div>
                     <div className="flex justify-center space-x-8 text-xs font-mono">
-                      <div>ACTIVE DAOS: <span className="text-red-400">23</span></div>
-                      <div>TERRITORIES: <span className="text-orange-400">47</span></div>
-                      <div>THREAT LEVEL: <span className="text-red-400 animate-pulse">CRITICAL</span></div>
+                      <div>MISSIONS: <span className="text-green-400">{missions.length}</span></div>
+                      <div>CHARACTERS: <span className="text-blue-400">{characters.length}</span></div>
+                      <div>NETWORK: <span className="text-orange-400">DEVNET</span></div>
                     </div>
                   </div>
                 </div>
@@ -155,28 +216,18 @@
               <div className="bg-black/80 border-b border-red-900/50 p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-6">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-                      <span className="font-mono text-sm text-green-400">ONLINE</span>
-                    </div>
+                    <WalletStatus />
                     <div className="text-xl font-bold text-white tracking-wide">
-                      {daos[selectedDAO].name}
+                      PROTOCOL WARS DAO
                     </div>
-                    <div className="text-sm text-gray-400">LVL {daos[selectedDAO].level}</div>
+                    <div className="text-sm text-gray-400">
+                      Characters: {characters.length} | Missions: {missions.filter(m => m.status ===
+  'completed').length}/{missions.length}
+                    </div>
                   </div>
 
-                  <div className="flex items-center space-x-8">
-                    <div className="text-sm">
-                      <span className="text-gray-400">POWER:</span>
-                      <span className="text-orange-400 font-bold ml-2">{daos[selectedDAO].power}</span>
-                    </div>
-                    <div className="text-sm">
-                      <span className="text-gray-400">STATUS:</span>
-                      <span className={`font-bold ml-2 ${daos[selectedDAO].status === 'ACTIVE' ? 'text-green-400' :
-   daos[selectedDAO].status === 'HOSTILE' ? 'text-red-400' : 'text-yellow-400'}`}>
-                        {daos[selectedDAO].status}
-                      </span>
-                    </div>
+                  <div className="flex items-center space-x-4">
+                    <WalletMultiButton className="!bg-transparent !border !border-gray-600 hover:!border-gray-400" />
                   </div>
                 </div>
               </div>
@@ -184,94 +235,115 @@
               {/* Main Game Area */}
               <div className="flex-1 flex">
 
-                {/* Left Panel - DAO Selection */}
-                <div className="w-80 bg-black/60 border-r border-gray-800 p-6 space-y-4">
-                  <div className="text-lg font-bold text-red-400 mb-6 font-mono tracking-wider">
-                    › HOSTILE ENTITIES
+                {/* Left Panel - Real Honeycomb Missions */}
+                <div className="w-80 bg-black/60 border-r border-gray-800 p-6 space-y-4 overflow-y-auto">
+                  <div className="text-lg font-bold text-green-400 mb-6 font-mono tracking-wider">
+                    › HONEYCOMB MISSIONS
                   </div>
 
-                  {daos.map((dao, index) => (
+                  {missions.map((mission, index) => (
                     <div
-                      key={index}
-                      onClick={() => setSelectedDAO(index)}
-                      className={`p-4 border-2 cursor-pointer transition-all duration-300 ${
-                        selectedDAO === index
-                          ? `bg-gradient-to-r ${dao.color} ${dao.accent} shadow-lg`
+                      key={mission.id}
+                      className={`p-4 border-2 transition-all duration-300 ${
+                        mission.status === 'active'
+                          ? 'border-green-500 bg-green-900/20'
+                          : mission.status === 'completed'
+                          ? 'border-blue-500 bg-blue-900/20'
                           : 'border-gray-700 hover:border-gray-600 bg-gray-900/50'
                       }`}
                     >
                       <div className="flex justify-between items-start mb-2">
-                        <h3 className="font-bold text-white text-sm">{dao.name}</h3>
+                        <h3 className="font-bold text-white text-sm">{mission.name}</h3>
                         <span className={`text-xs px-2 py-1 rounded ${
-                          dao.threat === 'HIGH' ? 'bg-red-900 text-red-200' :
-                          dao.threat === 'MEDIUM' ? 'bg-orange-900 text-orange-200' :
+                          mission.status === 'active' ? 'bg-green-900 text-green-200' :
+                          mission.status === 'completed' ? 'bg-blue-900 text-blue-200' :
                           'bg-gray-700 text-gray-200'
                         }`}>
-                          {dao.threat}
+                          {mission.status.toUpperCase()}
                         </span>
                       </div>
-                      <div className="space-y-1 text-xs text-gray-400">
-                        <div>Level: <span className="text-white">{dao.level}</span></div>
-                        <div>Power: <span className="text-orange-400">{dao.power}</span></div>
-                        <div>Territories: <span className="text-blue-400">{dao.territories}</span></div>
+
+                      <p className="text-xs text-gray-400 mb-3">{mission.description}</p>
+
+                      <div className="space-y-1 text-xs text-gray-400 mb-3">
+                        <div>Level Req: <span className="text-white">{mission.requirements.level}</span></div>
+                        <div>Duration: <span className="text-yellow-400">{Math.floor(mission.duration / 60)}min</span></div>
+                        <div>Rewards: <span className="text-green-400">{mission.rewards.xp} XP, {mission.rewards.tokens}
+  tokens</span></div>
                       </div>
-                      <div className="mt-2 bg-gray-800 rounded-full h-1">
-                        <div
-                          className={`h-full rounded-full bg-gradient-to-r ${dao.color}`}
-                          style={{width: `${(dao.power / 2000) * 100}%`}}
-                        ></div>
-                      </div>
+
+                      {mission.status === 'available' && (
+                        <button
+                          onClick={() => handleStartMission(mission.id)}
+                          disabled={loading}
+                          className="w-full bg-green-600 hover:bg-green-700 px-3 py-2 text-xs font-bold rounded
+  transition-colors duration-300 disabled:opacity-50"
+                        >
+                          {loading ? 'STARTING...' : 'START MISSION'}
+                        </button>
+                      )}
+
+                      {mission.status === 'active' && selectedMission === mission.id && (
+                        <div className="mt-2">
+                          <div className="flex justify-between text-xs text-gray-400 mb-1">
+                            <span>PROGRESS</span>
+                            <span>{missionProgress}%</span>
+                          </div>
+                          <div className="bg-gray-800 rounded-full h-1">
+                            <div
+                              className="h-full bg-green-400 rounded-full transition-all duration-300"
+                              style={{width: `${missionProgress}%`}}
+                            ></div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
 
-                {/* Center - Battle View */}
+                {/* Center - Battle Command */}
                 <div className="flex-1 relative">
                   <div className="absolute inset-0 bg-gradient-to-b from-red-900/20 to-black/80">
                     <div className="h-full flex flex-col items-center justify-center p-8">
 
-                      {/* Battle Status */}
                       <div className="text-center mb-8">
-                        <h2 className="text-4xl font-bold text-white mb-4">TERRITORY CONTROL</h2>
-                        <p className="text-gray-300 text-lg">Blockchain supremacy hangs in the balance</p>
+                        <h2 className="text-4xl font-bold text-white mb-4">MISSION CONTROL</h2>
+                        <p className="text-gray-300 text-lg">Real on-chain missions powered by Honeycomb Protocol</p>
                       </div>
 
-                      {/* Mission Progress */}
-                      <div className="w-full max-w-md mb-8">
-                        <div className="flex justify-between text-sm text-gray-400 mb-2">
-                          <span>MISSION PROGRESS</span>
-                          <span>{missionProgress}%</span>
+                      {/* Active Mission Display */}
+                      {selectedMission && (
+                        <div className="w-full max-w-md mb-8 bg-black/50 border border-green-500 rounded-lg p-6">
+                          <h3 className="text-green-400 font-bold mb-2">ACTIVE MISSION</h3>
+                          <p className="text-white mb-4">
+                            {missions.find(m => m.id === selectedMission)?.name}
+                          </p>
+                          <div className="bg-gray-800 rounded-full h-3 overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-300"
+                              style={{width: `${missionProgress}%`}}
+                            ></div>
+                          </div>
+                          <div className="text-right text-sm text-gray-400 mt-1">
+                            {missionProgress}% Complete
+                          </div>
                         </div>
-                        <div className="bg-gray-800 rounded-full h-2 overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-all
-  duration-300"
-                            style={{width: `${missionProgress}%`}}
-                          ></div>
-                        </div>
-                      </div>
+                      )}
 
-                      {/* Action Buttons */}
-                      <div className="grid grid-cols-2 gap-4 mb-8">
-                        <button className="px-8 py-4 bg-gradient-to-r from-red-700 to-red-600 border border-red-500
-   text-white font-bold tracking-wide hover:shadow-lg hover:shadow-red-500/50 transition-all duration-300">
-                          ⚔️ ATTACK
-                        </button>
-                        <button className="px-8 py-4 bg-gradient-to-r from-blue-700 to-blue-600 border
-  border-blue-500 text-white font-bold tracking-wide hover:shadow-lg hover:shadow-blue-500/50 transition-all
-  duration-300">
-                          🛡️ DEFEND
-                        </button>
-                        <button className="px-8 py-4 bg-gradient-to-r from-green-700 to-green-600 border
-  border-green-500 text-white font-bold tracking-wide hover:shadow-lg hover:shadow-green-500/50 transition-all
-  duration-300">
-                          📋 MISSION
-                        </button>
-                        <button className="px-8 py-4 bg-gradient-to-r from-purple-700 to-purple-600 border
-  border-purple-500 text-white font-bold tracking-wide hover:shadow-lg hover:shadow-purple-500/50 transition-all
-  duration-300">
-                          🔧 UPGRADE
-                        </button>
+                      {/* Stats */}
+                      <div className="grid grid-cols-2 gap-6 mb-8">
+                        <div className="bg-gray-900/50 border border-gray-700 p-4 rounded">
+                          <h4 className="text-green-400 font-bold mb-2">COMPLETED MISSIONS</h4>
+                          <div className="text-3xl font-bold text-white">
+                            {missions.filter(m => m.status === 'completed').length}
+                          </div>
+                        </div>
+                        <div className="bg-gray-900/50 border border-gray-700 p-4 rounded">
+                          <h4 className="text-blue-400 font-bold mb-2">ACTIVE CHARACTERS</h4>
+                          <div className="text-3xl font-bold text-white">
+                            {characters.length}
+                          </div>
+                        </div>
                       </div>
 
                       <button
@@ -285,64 +357,31 @@
                   </div>
                 </div>
 
-                {/* Right Panel - Stats */}
+                {/* Right Panel - Character Info */}
                 <div className="w-80 bg-black/60 border-l border-gray-800 p-6">
-                  <div className="text-lg font-bold text-orange-400 mb-6 font-mono tracking-wider">
-                    › BATTLEFIELD INTEL
+                  <div className="text-lg font-bold text-blue-400 mb-6 font-mono tracking-wider">
+                    › DAO ROSTER
                   </div>
 
-                  <div className="space-y-6">
-                    <div className="bg-gray-900/50 border border-gray-700 p-4">
-                      <h4 className="text-sm font-bold text-white mb-2">CURRENT THREATS</h4>
-                      <div className="space-y-2 text-xs">
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Active Hostiles:</span>
-                          <span className="text-red-400">7</span>
+                  {characters.length > 0 ? (
+                    <div className="space-y-4">
+                      {characters.map((character) => (
+                        <div key={character.id} className="bg-gray-900/50 border border-gray-700 p-4 rounded">
+                          <h4 className="text-white font-bold mb-2">{character.name}</h4>
+                          <div className="space-y-1 text-xs text-gray-400">
+                            <div>Level: <span className="text-white">{character.level}</span></div>
+                            <div>XP: <span className="text-green-400">{character.xp}</span></div>
+                            <div>Traits: <span className="text-purple-400">{character.traits.length}</span></div>
+                          </div>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Incoming Raids:</span>
-                          <span className="text-orange-400">3</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Defense Status:</span>
-                          <span className="text-green-400">ACTIVE</span>
-                        </div>
-                      </div>
+                      ))}
                     </div>
-
-                    <div className="bg-gray-900/50 border border-gray-700 p-4">
-                      <h4 className="text-sm font-bold text-white mb-2">RESOURCES</h4>
-                      <div className="space-y-3 text-xs">
-                        <div>
-                          <div className="flex justify-between mb-1">
-                            <span className="text-gray-400">Computing Power</span>
-                            <span className="text-blue-400">847/1000</span>
-                          </div>
-                          <div className="bg-gray-800 rounded-full h-1">
-                            <div className="bg-blue-400 h-1 rounded-full" style={{width: '84.7%'}}></div>
-                          </div>
-                        </div>
-                        <div>
-                          <div className="flex justify-between mb-1">
-                            <span className="text-gray-400">Network Security</span>
-                            <span className="text-green-400">623/800</span>
-                          </div>
-                          <div className="bg-gray-800 rounded-full h-1">
-                            <div className="bg-green-400 h-1 rounded-full" style={{width: '77.9%'}}></div>
-                          </div>
-                        </div>
-                        <div>
-                          <div className="flex justify-between mb-1">
-                            <span className="text-gray-400">Token Reserves</span>
-                            <span className="text-yellow-400">1,247</span>
-                          </div>
-                          <div className="bg-gray-800 rounded-full h-1">
-                            <div className="bg-yellow-400 h-1 rounded-full" style={{width: '62.4%'}}></div>
-                          </div>
-                        </div>
-                      </div>
+                  ) : (
+                    <div className="text-center text-gray-400">
+                      <p className="mb-4">No characters created yet.</p>
+                      <p className="text-xs">Start a mission to auto-create your first DAO commander!</p>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
