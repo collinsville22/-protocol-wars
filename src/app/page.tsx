@@ -1,261 +1,319 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import BattlefieldMap from '@/components/BattlefieldMap';
-import MissionPanel from '@/components/MissionPanel';
-import DAOPanel from '@/components/DAOPanel';
-import Leaderboard from '@/components/Leaderboard';
-import { ResourcePanel, UnitDeployment, BattleLog, LeaderboardPanel } from '@/components/GameSystems';
-import SoundSystem from '@/components/SoundSystem';
-import TutorialSystem from '@/components/TutorialSystem';
-import useGameState from '@/hooks/useGameState';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useWallet } from '@solana/wallet-adapter-react';
+
+type GameState = 'menu' | 'waiting' | 'ready' | 'playing' | 'results';
+
+interface GameStats {
+  wins: number;
+  losses: number;
+  bestTime: number;
+  totalGames: number;
+  streak: number;
+}
 
 export default function Home() {
   const [isClient, setIsClient] = useState(false);
-  const [showTutorial, setShowTutorial] = useState(true);
-  const { processGameTick, daos, territories, missions, leaderboard } = useGameState();
+  const [gameState, setGameState] = useState<GameState>('menu');
+  const [reactionTime, setReactionTime] = useState<number | null>(null);
+  const [waitTime, setWaitTime] = useState(0);
+  const [gameStartTime, setGameStartTime] = useState(0);
+  const [stats, setStats] = useState<GameStats>({
+    wins: 0,
+    losses: 0,
+    bestTime: Infinity,
+    totalGames: 0,
+    streak: 0
+  });
+  const [showResults, setShowResults] = useState(false);
+  const [tooEarly, setTooEarly] = useState(false);
+  const { connected } = useWallet();
 
   useEffect(() => {
     setIsClient(true);
-    
-    // Start game loop
-    const gameLoop = setInterval(() => {
-      processGameTick();
-    }, 1000);
+    // Load stats from localStorage
+    const savedStats = localStorage.getItem('reactionGameStats');
+    if (savedStats) {
+      setStats(JSON.parse(savedStats));
+    }
+  }, []);
 
-    return () => clearInterval(gameLoop);
-  }, [processGameTick]);
+  const saveStats = useCallback((newStats: GameStats) => {
+    setStats(newStats);
+    localStorage.setItem('reactionGameStats', JSON.stringify(newStats));
+  }, []);
+
+  const startGame = useCallback(() => {
+    setGameState('waiting');
+    setReactionTime(null);
+    setTooEarly(false);
+    setShowResults(false);
+    
+    // Random wait time between 2-8 seconds
+    const randomWait = Math.random() * 6000 + 2000;
+    setWaitTime(randomWait);
+    
+    setTimeout(() => {
+      setGameStartTime(Date.now());
+      setGameState('ready');
+    }, randomWait);
+  }, []);
+
+  const handleClick = useCallback(() => {
+    if (gameState === 'waiting') {
+      // Clicked too early!
+      setTooEarly(true);
+      setGameState('results');
+      const newStats = {
+        ...stats,
+        losses: stats.losses + 1,
+        totalGames: stats.totalGames + 1,
+        streak: 0
+      };
+      saveStats(newStats);
+      setShowResults(true);
+      return;
+    }
+    
+    if (gameState === 'ready') {
+      // Perfect timing!
+      const time = Date.now() - gameStartTime;
+      setReactionTime(time);
+      setGameState('results');
+      
+      const newStats = {
+        ...stats,
+        wins: stats.wins + 1,
+        totalGames: stats.totalGames + 1,
+        bestTime: Math.min(stats.bestTime, time),
+        streak: stats.streak + 1
+      };
+      saveStats(newStats);
+      setShowResults(true);
+    }
+  }, [gameState, gameStartTime, stats, saveStats]);
 
   if (!isClient) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-4xl font-gaming text-blue-400 animate-pulse">
-          Protocol Wars Loading...
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <div className="text-4xl font-bold text-red-400 animate-pulse">
+          REACTION BATTLE Loading...
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black text-white overflow-hidden">
-      <SoundSystem enabled={true} />
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-purple-900 text-white overflow-hidden">
       
-      {/* Tutorial System */}
-      {showTutorial && (
-        <TutorialSystem onComplete={() => setShowTutorial(false)} />
-      )}
-      
-      {/* TLOU2-Inspired Animated Background */}
-      <div className="fixed inset-0 bg-gradient-to-br from-gray-900 via-black to-red-900 opacity-70"></div>
-      <div className="fixed inset-0 opacity-20" style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='m36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
+      {/* Animated Background */}
+      <div className="fixed inset-0 bg-gradient-to-br from-blue-900/20 via-purple-900/20 to-red-900/20"></div>
+      <div className="fixed inset-0" style={{
+        backgroundImage: `radial-gradient(circle at 25% 25%, rgba(59, 130, 246, 0.1) 0%, transparent 50%), 
+                         radial-gradient(circle at 75% 75%, rgba(239, 68, 68, 0.1) 0%, transparent 50%)`
       }}></div>
 
-      {/* Tactical Header */}
-      <header className="relative z-10 bg-black/80 border-b border-red-500/50 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-6">
-            <div className="relative">
-              <h1 className="text-3xl lg:text-5xl font-black tracking-tight text-white">
-                <span className="bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500 bg-clip-text text-transparent animate-pulse">
-                  PROTOCOL
-                </span>
-                <span className="text-white ml-2">WARS</span>
-              </h1>
-              <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-gradient-to-r from-red-500 to-transparent"></div>
-            </div>
-            <div className="text-sm font-mono text-gray-400">
-              <div>COMBAT SEASON {useGameState.getState().season.number}</div>
-              <div className="text-red-400 animate-pulse">⚠ THREAT LEVEL: HIGH</div>
+      {/* Header */}
+      <header className="relative z-10 bg-black/50 backdrop-blur-sm border-b border-blue-500/30 p-6">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-red-400">
+              ⚡ REACTION BATTLE
+            </h1>
+            <div className="text-sm text-gray-400">
+              Test your lightning reflexes
             </div>
           </div>
           <div className="flex items-center space-x-4">
-            <div className="text-sm font-mono">
-              <div className="text-gray-400">CONNECTION STATUS:</div>
-              <div className="text-green-400 animate-pulse">● SECURE</div>
+            <div className="text-right text-sm">
+              <div className="text-gray-400">Best Time</div>
+              <div className="text-yellow-400 font-bold">
+                {stats.bestTime === Infinity ? '---' : `${stats.bestTime}ms`}
+              </div>
             </div>
-            <WalletMultiButton className="!bg-gradient-to-r !from-red-600 !to-red-700 hover:!from-red-700 hover:!to-red-800 !border-2 !border-red-400" />
+            <WalletMultiButton className="!bg-gradient-to-r !from-blue-600 !to-purple-600 hover:!from-blue-700 hover:!to-purple-700" />
           </div>
         </div>
       </header>
 
-      {/* Epic Mission Briefing */}
-      <div className="relative z-10 bg-gradient-to-r from-red-900/20 to-orange-900/20 border border-red-500/30 mx-4 mt-6 p-6 rounded-lg">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center animate-pulse">
-              <span className="text-2xl">🎯</span>
+      {/* Main Game Area */}
+      <div className="relative z-10 max-w-4xl mx-auto p-6">
+        
+        {/* Stats Panel */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+          <div className="bg-black/50 backdrop-blur-sm border border-blue-500/30 rounded-lg p-4 text-center">
+            <div className="text-blue-400 text-2xl font-bold">{stats.wins}</div>
+            <div className="text-gray-400 text-sm">Wins</div>
+          </div>
+          <div className="bg-black/50 backdrop-blur-sm border border-red-500/30 rounded-lg p-4 text-center">
+            <div className="text-red-400 text-2xl font-bold">{stats.losses}</div>
+            <div className="text-gray-400 text-sm">Losses</div>
+          </div>
+          <div className="bg-black/50 backdrop-blur-sm border border-green-500/30 rounded-lg p-4 text-center">
+            <div className="text-green-400 text-2xl font-bold">{stats.totalGames}</div>
+            <div className="text-gray-400 text-sm">Total</div>
+          </div>
+          <div className="bg-black/50 backdrop-blur-sm border border-yellow-500/30 rounded-lg p-4 text-center">
+            <div className="text-yellow-400 text-2xl font-bold">{stats.streak}</div>
+            <div className="text-gray-400 text-sm">Streak</div>
+          </div>
+          <div className="bg-black/50 backdrop-blur-sm border border-purple-500/30 rounded-lg p-4 text-center">
+            <div className="text-purple-400 text-2xl font-bold">
+              {stats.totalGames > 0 ? Math.round((stats.wins / stats.totalGames) * 100) : 0}%
             </div>
-            <div>
-              <h2 className="text-2xl font-bold text-red-400">CURRENT OBJECTIVE</h2>
-              <p className="text-gray-300">Establish DAO supremacy across blockchain territories</p>
-            </div>
-          </div>
-          <div className="text-right font-mono">
-            <div className="text-yellow-400 text-2xl font-bold">75%</div>
-            <div className="text-xs text-gray-400">MISSION PROGRESS</div>
-          </div>
-        </div>
-        <div className="bg-gray-800 rounded-full h-3 overflow-hidden mb-4">
-          <div className="bg-gradient-to-r from-red-500 to-yellow-500 h-full rounded-full animate-pulse" style={{width: '75%'}}></div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-          <div className="bg-black/50 p-3 rounded border border-red-500/20">
-            <div className="text-red-400 font-bold">🏃 ACTIVE TASK</div>
-            <div className="text-white">Deploy 5 Validator Units</div>
-            <div className="text-gray-400">Reward: +1000 XP, +500 SOL</div>
-          </div>
-          <div className="bg-black/50 p-3 rounded border border-yellow-500/20">
-            <div className="text-yellow-400 font-bold">⏳ PENDING</div>
-            <div className="text-white">Capture 3 Territories</div>
-            <div className="text-gray-400">Unlock: Advanced Units</div>
-          </div>
-          <div className="bg-black/50 p-3 rounded border border-green-500/20">
-            <div className="text-green-400 font-bold">✓ COMPLETED</div>
-            <div className="text-white">Connect Wallet</div>
-            <div className="text-gray-400">+100 XP Earned</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Game Area with Dark Theme */}
-      <div className="relative z-10 grid grid-cols-1 lg:grid-cols-6 gap-4 lg:gap-6 p-4">
-        {/* Left Panel - Enhanced Resources & Unit Management */}
-        <div className="lg:col-span-1 space-y-4">
-          <div className="bg-black/80 border border-red-500/30 rounded-lg relative" id="resources">
-            {/* Tutorial highlight */}
-            <div className="absolute -inset-1 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-lg opacity-0 animate-pulse tutorial-highlight"></div>
-            <ResourcePanel />
-          </div>
-          <div className="bg-black/80 border border-purple-500/30 rounded-lg relative" id="deploy">
-            <div className="absolute -inset-1 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg opacity-0 animate-pulse tutorial-highlight"></div>
-            <UnitDeployment />
+            <div className="text-gray-400 text-sm">Win Rate</div>
           </div>
         </div>
 
-        {/* Center - Enhanced 3D Battlefield */}
-        <div className="lg:col-span-3">
-          <div className="bg-black/90 border-2 border-red-500/50 rounded-lg p-4 shadow-2xl shadow-red-500/20 relative" id="battlefield">
-            <div className="absolute -inset-1 bg-gradient-to-r from-red-500 to-yellow-500 rounded-lg opacity-0 animate-pulse tutorial-highlight"></div>
-            <div className="flex items-center justify-between mb-4 relative z-10">
-              <h2 className="text-2xl font-bold text-red-400 font-mono tracking-wider">🌍 COMBAT ZONE</h2>
-              <div className="flex space-x-2">
-                <button className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded font-bold animate-pulse">
-                  ⚔️ ATTACK MODE
-                </button>
-                <button className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded font-bold">
-                  🚀 DEPLOY
+        {/* Game Interface */}
+        <AnimatePresence mode="wait">
+          {gameState === 'menu' && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="text-center"
+            >
+              <div className="bg-black/70 backdrop-blur-sm border border-blue-500/50 rounded-2xl p-12 mb-8">
+                <h2 className="text-6xl font-black mb-6 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
+                  READY?
+                </h2>
+                <p className="text-xl text-gray-300 mb-8 leading-relaxed">
+                  Wait for the screen to turn <span className="text-green-400 font-bold">GREEN</span>, then click as fast as possible!<br/>
+                  Click too early and you lose. Perfect timing wins!
+                </p>
+                <button
+                  onClick={startGame}
+                  className="px-12 py-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-2xl font-bold rounded-xl shadow-2xl shadow-blue-500/30 transform hover:scale-105 transition-all duration-200"
+                >
+                  🚀 START REACTION TEST
                 </button>
               </div>
-            </div>
-            <div className="relative">
-              <BattlefieldMap />
-              <div className="absolute top-2 right-2 bg-black/80 p-2 rounded border border-yellow-500/50">
-                <div className="text-xs font-mono text-yellow-400">TACTICAL OVERVIEW</div>
-                <div className="text-xs text-white">Units: {daos.find(d => d.id === 'player_dao')?.units?.length || 0}/10</div>
-                <div className="text-xs text-white">Territories: {territories.filter(t => t.owner === 'player_dao').length}</div>
+              <div className="text-gray-400 text-lg">
+                Best players react in under 200ms!
               </div>
-              
-              {/* Battlefield Instructions */}
-              {territories.length === 0 && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded">
-                  <div className="text-center text-white p-6">
-                    <div className="text-4xl mb-4 animate-spin">⚡</div>
-                    <div className="text-xl font-bold mb-2">Initializing Battlefield...</div>
-                    <div className="text-gray-400">Generating territories and enemy forces</div>
-                  </div>
+            </motion.div>
+          )}
+
+          {gameState === 'waiting' && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center"
+              onClick={handleClick}
+            >
+              <div className="bg-red-900/50 backdrop-blur-sm border-4 border-red-500 rounded-2xl p-12 cursor-pointer hover:bg-red-900/70 transition-all min-h-[400px] flex flex-col items-center justify-center">
+                <h2 className="text-8xl font-black text-red-400 mb-6 animate-pulse">
+                  WAIT...
+                </h2>
+                <p className="text-2xl text-red-300 mb-4">
+                  Don't click yet!
+                </p>
+                <div className="text-lg text-gray-400">
+                  Screen will turn green when ready
                 </div>
-              )}
-              
-              {territories.length > 0 && daos.find(d => d.id === 'player_dao')?.units?.length === 0 && (
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/80 p-4 rounded border border-yellow-500/50 text-center">
-                  <div className="text-yellow-400 font-bold mb-2">👆 CLICK TO START!</div>
-                  <div className="text-white text-sm">Click gray territories to attack</div>
-                  <div className="text-white text-sm">Deploy units for stronger attacks</div>
+              </div>
+            </motion.div>
+          )}
+
+          {gameState === 'ready' && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center"
+              onClick={handleClick}
+            >
+              <div className="bg-green-900/50 backdrop-blur-sm border-4 border-green-500 rounded-2xl p-12 cursor-pointer hover:bg-green-900/70 transition-all min-h-[400px] flex flex-col items-center justify-center animate-pulse">
+                <h2 className="text-8xl font-black text-green-400 mb-6">
+                  CLICK!
+                </h2>
+                <p className="text-2xl text-green-300 mb-4">
+                  Click now as fast as possible!
+                </p>
+                <div className="text-lg text-gray-400">
+                  ⚡ GO GO GO! ⚡
                 </div>
-              )}
-            </div>
-          </div>
-        </div>
+              </div>
+            </motion.div>
+          )}
 
-        {/* Right Panel - Enhanced Intelligence */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="bg-black/80 border border-green-500/30 rounded-lg">
-            <BattleLog />
-          </div>
-          <div className="bg-black/80 border border-yellow-500/30 rounded-lg">
-            <LeaderboardPanel />
-          </div>
-          
-          {/* Enhanced Stats with TLOU2 Style */}
-          <div className="bg-black/90 border border-red-500/30 rounded-lg p-4">
-            <h3 className="text-lg font-bold text-red-400 mb-3 font-mono">📊 TACTICAL STATUS</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center p-2 bg-gray-900/50 rounded">
-                <span className="text-gray-400 font-mono">ACTIVE DAOS:</span>
-                <span className="text-white font-bold text-lg">{daos.length}</span>
+          {gameState === 'results' && showResults && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="text-center"
+            >
+              <div className={`backdrop-blur-sm border-4 rounded-2xl p-12 ${
+                tooEarly 
+                  ? 'bg-red-900/50 border-red-500' 
+                  : 'bg-green-900/50 border-green-500'
+              }`}>
+                {tooEarly ? (
+                  <>
+                    <h2 className="text-6xl font-black text-red-400 mb-6">
+                      TOO EARLY!
+                    </h2>
+                    <p className="text-xl text-red-300 mb-8">
+                      You clicked before the green light! 😅<br/>
+                      Patience is key to lightning reflexes.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="text-6xl font-black text-green-400 mb-6">
+                      {reactionTime! < 200 ? 'LIGHTNING!' : reactionTime! < 300 ? 'EXCELLENT!' : 'GOOD!'}
+                    </h2>
+                    <div className="text-8xl font-black text-yellow-400 mb-4">
+                      {reactionTime}ms
+                    </div>
+                    <p className="text-xl text-green-300 mb-8">
+                      {reactionTime! < 150 && "🔥 INHUMAN REFLEXES! Are you a robot?"}
+                      {reactionTime! >= 150 && reactionTime! < 200 && "⚡ Lightning fast! You're in the top 1%!"}
+                      {reactionTime! >= 200 && reactionTime! < 250 && "🎯 Excellent reflexes! Very impressive!"}
+                      {reactionTime! >= 250 && reactionTime! < 350 && "👍 Good reaction time! Keep practicing!"}
+                      {reactionTime! >= 350 && "💪 Room for improvement - try again!"}
+                    </p>
+                    {reactionTime === stats.bestTime && (
+                      <div className="text-2xl text-yellow-400 font-bold mb-4 animate-bounce">
+                        🏆 NEW PERSONAL BEST! 🏆
+                      </div>
+                    )}
+                  </>
+                )}
+                
+                <div className="flex justify-center space-x-4">
+                  <button
+                    onClick={startGame}
+                    className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-xl font-bold rounded-xl shadow-lg transform hover:scale-105 transition-all duration-200"
+                  >
+                    🔄 TRY AGAIN
+                  </button>
+                  <button
+                    onClick={() => setGameState('menu')}
+                    className="px-8 py-4 bg-gray-700 hover:bg-gray-600 text-white text-xl font-bold rounded-xl shadow-lg transform hover:scale-105 transition-all duration-200"
+                  >
+                    📊 MENU
+                  </button>
+                </div>
               </div>
-              <div className="flex justify-between items-center p-2 bg-gray-900/50 rounded">
-                <span className="text-gray-400 font-mono">TERRITORIES:</span>
-                <span className="text-white font-bold text-lg">{territories.length}</span>
-              </div>
-              <div className="flex justify-between items-center p-2 bg-gray-900/50 rounded">
-                <span className="text-gray-400 font-mono">MISSIONS:</span>
-                <span className="text-red-400 font-bold text-lg animate-pulse">
-                  {missions.filter(m => m.status === 'active').length} ACTIVE
-                </span>
-              </div>
-              <div className="mt-4 p-3 bg-gradient-to-r from-red-900/30 to-yellow-900/30 border border-red-500/20 rounded">
-                <div className="text-xs font-mono text-yellow-400 mb-1">NEXT REWARD UNLOCK</div>
-                <div className="text-white font-bold">Deploy 2 more units → +500 SOL</div>
-              </div>
-            </div>
-          </div>
-        </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* Enhanced Secondary Panels with TLOU2 Theme */}
-      <div className="hidden lg:grid lg:grid-cols-4 gap-6 mt-6 px-4 relative z-10">
-        <div className="bg-black/80 border border-blue-500/30 rounded-lg">
-          <DAOPanel />
+      {/* Footer with challenge tips */}
+      <div className="relative z-10 text-center mt-8 p-6">
+        <div className="text-gray-400 text-sm mb-4">
+          💡 Pro Tips: Stay relaxed • Focus on the center • Don't anticipate • React purely to color change
         </div>
-        <div className="bg-black/80 border border-green-500/30 rounded-lg">
-          <MissionPanel />
-        </div>
-        <div className="col-span-2 bg-black/80 border border-yellow-500/30 rounded-lg">
-          <Leaderboard />
-        </div>
-      </div>
-
-      {/* Enhanced Mobile Navigation with TLOU2 Style */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-sm border-t border-red-500/50 z-50">
-        <div className="flex justify-around p-4">
-          <button className="flex flex-col items-center text-xs text-red-400 hover:text-red-300 transition-colors">
-            <div className="w-8 h-8 mb-1 bg-red-600/20 rounded-full flex items-center justify-center border border-red-500/30">🏰</div>
-            <span className="font-mono">DAO</span>
-          </button>
-          <button className="flex flex-col items-center text-xs text-yellow-400 hover:text-yellow-300 transition-colors">
-            <div className="w-8 h-8 mb-1 bg-yellow-600/20 rounded-full flex items-center justify-center border border-yellow-500/30 animate-pulse">⚔️</div>
-            <span className="font-mono">COMBAT</span>
-          </button>
-          <button className="flex flex-col items-center text-xs text-green-400 hover:text-green-300 transition-colors">
-            <div className="w-8 h-8 mb-1 bg-green-600/20 rounded-full flex items-center justify-center border border-green-500/30">📋</div>
-            <span className="font-mono">MISSIONS</span>
-          </button>
-          <button className="flex flex-col items-center text-xs text-orange-400 hover:text-orange-300 transition-colors">
-            <div className="w-8 h-8 mb-1 bg-orange-600/20 rounded-full flex items-center justify-center border border-orange-500/30">🏆</div>
-            <span className="font-mono">RANKS</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Atmospheric Particles Effect */}
-      <div className="fixed inset-0 pointer-events-none z-5 overflow-hidden">
-        <div className="absolute w-2 h-2 bg-red-500/30 rounded-full animate-ping" style={{top: '20%', left: '10%', animationDelay: '0s'}}></div>
-        <div className="absolute w-1 h-1 bg-orange-500/40 rounded-full animate-ping" style={{top: '60%', left: '80%', animationDelay: '1s'}}></div>
-        <div className="absolute w-3 h-3 bg-yellow-500/20 rounded-full animate-ping" style={{top: '80%', left: '30%', animationDelay: '2s'}}></div>
-        <div className="absolute w-1 h-1 bg-red-500/50 rounded-full animate-ping" style={{top: '40%', left: '70%', animationDelay: '0.5s'}}></div>
+        {connected && (
+          <div className="text-blue-400 text-sm">
+            🌟 Wallet connected! Your best times are automatically saved.
+          </div>
+        )}
       </div>
     </div>
   );
