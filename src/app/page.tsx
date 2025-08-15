@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { useHoneycomb } from '@/hooks/useHoneycomb';
 
 type GameState = 'menu' | 'waiting' | 'ready' | 'playing' | 'results';
 
@@ -13,6 +14,9 @@ interface GameStats {
   bestTime: number;
   totalGames: number;
   streak: number;
+  level: number;
+  xp: number;
+  traits: string[];
 }
 
 export default function Home() {
@@ -26,11 +30,24 @@ export default function Home() {
     losses: 0,
     bestTime: Infinity,
     totalGames: 0,
-    streak: 0
+    streak: 0,
+    level: 1,
+    xp: 0,
+    traits: []
   });
   const [showResults, setShowResults] = useState(false);
   const [tooEarly, setTooEarly] = useState(false);
+  const [newTraitUnlocked, setNewTraitUnlocked] = useState<string | null>(null);
   const { connected } = useWallet();
+  const { 
+    missions, 
+    characters, 
+    initializeProject, 
+    createCharacter, 
+    startMission, 
+    completeMission,
+    loading 
+  } = useHoneycomb();
 
   useEffect(() => {
     setIsClient(true);
@@ -39,18 +56,85 @@ export default function Home() {
     if (savedStats) {
       setStats(JSON.parse(savedStats));
     }
+    
+    // Initialize Honeycomb if wallet connected
+    if (connected) {
+      initializeProject("Reaction Battle Championship");
+    }
+  }, [connected, initializeProject]);
+
+  // Create character on first play
+  const ensureCharacter = useCallback(async () => {
+    if (connected && characters.length === 0) {
+      await createCharacter("Lightning Reflexes", "speed_demon");
+    }
+  }, [connected, characters, createCharacter]);
+
+  // Check for trait unlocks based on performance
+  const checkTraitUnlocks = useCallback((newStats: GameStats) => {
+    const newTraits = [];
+    
+    if (newStats.bestTime < 150 && !newStats.traits.includes('Lightning_Reflexes')) {
+      newTraits.push('Lightning_Reflexes');
+    }
+    if (newStats.streak >= 5 && !newStats.traits.includes('Consistent_Performer')) {
+      newTraits.push('Consistent_Performer');
+    }
+    if (newStats.wins >= 10 && !newStats.traits.includes('Veteran_Clicker')) {
+      newTraits.push('Veteran_Clicker');
+    }
+    if (newStats.bestTime < 100 && !newStats.traits.includes('Superhuman')) {
+      newTraits.push('Superhuman');
+    }
+    
+    if (newTraits.length > 0) {
+      const updatedStats = {
+        ...newStats,
+        traits: [...newStats.traits, ...newTraits],
+        xp: newStats.xp + (newTraits.length * 100)
+      };
+      setNewTraitUnlocked(newTraits[0]);
+      return updatedStats;
+    }
+    
+    return newStats;
   }, []);
+
+  // Start Honeycomb mission for each game
+  const startHoneycombMission = useCallback(async () => {
+    if (connected && characters.length > 0) {
+      const missionId = `reaction_test_${Date.now()}`;
+      await startMission(missionId, characters[0].id);
+    }
+  }, [connected, characters, startMission]);
+
+  // Complete Honeycomb mission with results
+  const completeHoneycombMission = useCallback(async (success: boolean, time?: number) => {
+    if (connected && characters.length > 0) {
+      const activeMission = missions.find(m => m.status === 'active');
+      if (activeMission) {
+        await completeMission(activeMission.id);
+      }
+    }
+  }, [connected, characters, missions, completeMission]);
 
   const saveStats = useCallback((newStats: GameStats) => {
     setStats(newStats);
     localStorage.setItem('reactionGameStats', JSON.stringify(newStats));
   }, []);
 
-  const startGame = useCallback(() => {
+  const startGame = useCallback(async () => {
     setGameState('waiting');
     setReactionTime(null);
     setTooEarly(false);
     setShowResults(false);
+    setNewTraitUnlocked(null);
+    
+    // Ensure Honeycomb character exists
+    await ensureCharacter();
+    
+    // Start Honeycomb mission
+    await startHoneycombMission();
     
     // Random wait time between 2-8 seconds
     const randomWait = Math.random() * 6000 + 2000;
@@ -60,19 +144,26 @@ export default function Home() {
       setGameStartTime(Date.now());
       setGameState('ready');
     }, randomWait);
-  }, []);
+  }, [ensureCharacter, startHoneycombMission]);
 
-  const handleClick = useCallback(() => {
+  const handleClick = useCallback(async () => {
     if (gameState === 'waiting') {
       // Clicked too early!
       setTooEarly(true);
       setGameState('results');
-      const newStats = {
+      
+      // Complete Honeycomb mission with failure
+      await completeHoneycombMission(false);
+      
+      let newStats = {
         ...stats,
         losses: stats.losses + 1,
         totalGames: stats.totalGames + 1,
         streak: 0
       };
+      
+      // Check for trait unlocks
+      newStats = checkTraitUnlocks(newStats);
       saveStats(newStats);
       setShowResults(true);
       return;
@@ -84,17 +175,25 @@ export default function Home() {
       setReactionTime(time);
       setGameState('results');
       
-      const newStats = {
+      // Complete Honeycomb mission with success
+      await completeHoneycombMission(true, time);
+      
+      let newStats = {
         ...stats,
         wins: stats.wins + 1,
         totalGames: stats.totalGames + 1,
         bestTime: Math.min(stats.bestTime, time),
-        streak: stats.streak + 1
+        streak: stats.streak + 1,
+        xp: stats.xp + (time < 200 ? 50 : time < 300 ? 30 : 10), // XP based on performance
+        level: Math.floor((stats.xp + (time < 200 ? 50 : time < 300 ? 30 : 10)) / 500) + 1
       };
+      
+      // Check for trait unlocks
+      newStats = checkTraitUnlocks(newStats);
       saveStats(newStats);
       setShowResults(true);
     }
-  }, [gameState, gameStartTime, stats, saveStats]);
+  }, [gameState, gameStartTime, stats, saveStats, completeHoneycombMission, checkTraitUnlocks]);
 
   if (!isClient) {
     return (
@@ -142,8 +241,8 @@ export default function Home() {
       {/* Main Game Area */}
       <div className="relative z-10 max-w-4xl mx-auto p-6">
         
-        {/* Stats Panel */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        {/* Stats Panel with Honeycomb Integration */}
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
           <div className="bg-black/50 backdrop-blur-sm border border-blue-500/30 rounded-lg p-4 text-center">
             <div className="text-blue-400 text-2xl font-bold">{stats.wins}</div>
             <div className="text-gray-400 text-sm">Wins</div>
@@ -153,20 +252,65 @@ export default function Home() {
             <div className="text-gray-400 text-sm">Losses</div>
           </div>
           <div className="bg-black/50 backdrop-blur-sm border border-green-500/30 rounded-lg p-4 text-center">
-            <div className="text-green-400 text-2xl font-bold">{stats.totalGames}</div>
-            <div className="text-gray-400 text-sm">Total</div>
+            <div className="text-green-400 text-2xl font-bold">{stats.level}</div>
+            <div className="text-gray-400 text-sm">Level</div>
           </div>
           <div className="bg-black/50 backdrop-blur-sm border border-yellow-500/30 rounded-lg p-4 text-center">
-            <div className="text-yellow-400 text-2xl font-bold">{stats.streak}</div>
-            <div className="text-gray-400 text-sm">Streak</div>
+            <div className="text-yellow-400 text-2xl font-bold">{stats.xp}</div>
+            <div className="text-gray-400 text-sm">XP</div>
           </div>
           <div className="bg-black/50 backdrop-blur-sm border border-purple-500/30 rounded-lg p-4 text-center">
-            <div className="text-purple-400 text-2xl font-bold">
-              {stats.totalGames > 0 ? Math.round((stats.wins / stats.totalGames) * 100) : 0}%
-            </div>
-            <div className="text-gray-400 text-sm">Win Rate</div>
+            <div className="text-purple-400 text-2xl font-bold">{stats.traits.length}</div>
+            <div className="text-gray-400 text-sm">Traits</div>
+          </div>
+          <div className="bg-black/50 backdrop-blur-sm border border-orange-500/30 rounded-lg p-4 text-center">
+            <div className="text-orange-400 text-2xl font-bold">{missions.length}</div>
+            <div className="text-gray-400 text-sm">Missions</div>
           </div>
         </div>
+
+        {/* Honeycomb Protocol Integration Status */}
+        {connected && (
+          <div className="bg-gradient-to-r from-green-900/20 to-blue-900/20 border border-green-500/30 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                  🍯
+                </div>
+                <div>
+                  <div className="text-green-400 font-bold">Honeycomb Protocol Active</div>
+                  <div className="text-gray-400 text-sm">
+                    {characters.length > 0 
+                      ? `Character: ${characters[0]?.name || 'Lightning Reflexes'}` 
+                      : 'Creating character...'
+                    }
+                  </div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-green-400 font-bold">On-Chain Progress</div>
+                <div className="text-gray-400 text-sm">Level {stats.level} • {stats.xp} XP</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Active Traits Display */}
+        {stats.traits.length > 0 && (
+          <div className="bg-gradient-to-r from-purple-900/20 to-pink-900/20 border border-purple-500/30 rounded-lg p-4 mb-6">
+            <div className="text-purple-400 font-bold mb-2">🏆 Unlocked Traits</div>
+            <div className="flex flex-wrap gap-2">
+              {stats.traits.map(trait => (
+                <span 
+                  key={trait}
+                  className="px-3 py-1 bg-purple-600/20 border border-purple-500/30 rounded-full text-purple-300 text-sm"
+                >
+                  {trait.replace('_', ' ')}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Game Interface */}
         <AnimatePresence mode="wait">
@@ -279,6 +423,11 @@ export default function Home() {
                     {reactionTime === stats.bestTime && (
                       <div className="text-2xl text-yellow-400 font-bold mb-4 animate-bounce">
                         🏆 NEW PERSONAL BEST! 🏆
+                      </div>
+                    )}
+                    {newTraitUnlocked && (
+                      <div className="text-2xl text-purple-400 font-bold mb-4 animate-pulse">
+                        🎉 TRAIT UNLOCKED: {newTraitUnlocked.replace('_', ' ')}! 🎉
                       </div>
                     )}
                   </>
